@@ -4,7 +4,7 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 
 def main():
-    tf = 10 # final time
+    tf = 70 # final time
     Ts = 0.01 # sample rate
     t = np.arange(0,tf,Ts) # t0 to tf in increments of Ts
     n = np.size(t)
@@ -19,15 +19,14 @@ def main():
     A_ref = np.matrix('-1')
     B_ref = -1*A_ref # for unity DC gain across controller
     x_ref = np.matrix('0')
-    r = np.matrix('2') # 'setpoint'
 
     # continuous model reference adaptive controller
     # u = k_x_hat*x + k_r_hat*r
     # adaptive parameters
     k_x_hat = np.matrix('0')
     k_r_hat = np.matrix('0')
-    gamma_x = np.matrix('15')
-    gamma_r = np.matrix('15')
+    gamma_x = np.matrix('5')
+    gamma_r = np.matrix('5')
 
     # discrete plant dynamics (computed using continuous system)
     Ad = np.exp(A*Ts)
@@ -44,21 +43,27 @@ def main():
     k_x_sig = np.zeros((n, 1))
     k_r_sig = np.zeros((n, 1))
 
+    # define setpoint(s)
+    r = np.concatenate((1*np.ones((1,1000)), 0*np.ones((1,1000)), -1*np.ones((1,1000)),0*np.ones((1,1000))), axis=1)
+    r = np.concatenate((r,2*np.ones((1,1000))), axis=1)
+    r = np.concatenate((r, 0 * np.ones((1, 1000))), axis=1)
+    r = np.concatenate((r, 1 * np.ones((1, 1000))), axis=1)
+
     for k in range(0,n):
 
         #  compute controller output using estimated gains (input to our system)
-        U = k_x_hat*x + k_r_hat*r # feedback and feedforward controller
+        U = k_x_hat*x + k_r_hat*r[0,k] # feedback and feedforward controller
 
         # simulate uncertain(to the controller) plant
         x = Ad*x + Bd*U # compute next state
         y = Cd*x # compute output
 
         # update reference model
-        x_ref = A_ref_d*x_ref + B_ref_d*r
+        x_ref = A_ref_d*x_ref + B_ref_d*r[0,k]
 
         # estimate gains using the following adaptive laws
-        k_x_hat = np.matrix(-1)*gamma_x*x*(x - x_ref)*np.sign(B)
-        k_r_hat = np.matrix(-1)*gamma_r*r*(x - x_ref)*np.sign(B)
+        k_x_hat = np.matrix(-1)*gamma_x*x*(x - x_ref)*np.sign(B)*Ts + k_x_hat
+        k_r_hat = np.matrix(-1)*gamma_r*r[0,k]*(x - x_ref)*np.sign(B)*Ts + k_r_hat
 
         # "sample"/measure output from system for plotting
         k_x_sig[k] = k_x_hat.T

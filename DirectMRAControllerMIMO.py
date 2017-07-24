@@ -4,7 +4,7 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 
 def main():
-    tf = 100 # final time
+    tf = 70 # final time
     Ts = 0.01 # sample rate
     t = np.arange(0,tf,Ts) # t0 to tf in increments of Ts
     n = np.size(t)
@@ -29,10 +29,10 @@ def main():
     K_x_hat = np.matrix('0;0')
     K_r_hat = np.matrix('0')
     Phi_hat = np.matrix('0')
-    Q = np.matrix('400 0; 0 400')
-    G_x = np.matrix('10 0; 0 10')
-    G_r = np.matrix('10')
-    G_p = np.matrix('10')
+    Q = np.matrix('100 0; 0 100')
+    G_x = np.matrix('5 0; 0 5')
+    G_r = np.matrix('5')
+    G_p = np.matrix('1')
 
     # discrete plant dynamics (computed using continuous system)
     Ad = sp.linalg.expm(A * Ts)
@@ -49,29 +49,34 @@ def main():
     k_x_sig = np.zeros((n, 1))
     k_r_sig = np.zeros((n, 1))
 
+    # define setpoint(s)
+    r = np.concatenate((1*np.ones((1,1000)), 0*np.ones((1,1000)), -1*np.ones((1,1000)),0*np.ones((1,1000))), axis=1)
+    r = np.concatenate((r,2*np.ones((1,1000))), axis=1)
+    r = np.concatenate((r, 0 * np.ones((1, 1000))), axis=1)
+    r = np.concatenate((r, 1 * np.ones((1, 1000))), axis=1)
+
     for k in range(0,n):
 
-        U = np.transpose(K_x_hat)*x + K_r_hat*r - Phi_hat*abs(x[0,0]*x[0,0])
+        U = np.transpose(K_x_hat)*x + K_r_hat*r[0,k] - Phi_hat*abs(x[0,0]*x[0,0])
 
         # simulate uncertain(to the controller) plant
-        x = Ad*x + Bd*L*(U +Phi * abs(x[0,0]*x[0,0]))# compute next state
+        x = Ad*x + Bd*L*(U + Phi*abs(x[0,0]*x[0,0]))# compute next state
         y = Cd*x # compute output
 
         # update reference model
-        x_ref = A_ref_d*x_ref + B_ref_d*r
+        x_ref = A_ref_d*x_ref + B_ref_d*r[0,k]
 
         # estimate gains using the following adaptive laws
         P = sp.linalg.solve_discrete_lyapunov(A_ref_d, Q*Ts)
-
-        K_x_hat = -G_x*x*np.transpose(x-x_ref)*P*B_ref_d
-        K_r_hat = -G_r * r * np.transpose(x - x_ref) * P * B_ref_d
-        Phi_hat = G_p*abs(x[0,0]*x[0,0])*np.transpose(x - x_ref)*P*B
+        K_x_hat = -G_x*x*np.transpose(x-x_ref)*P*B_ref_d*Ts + K_x_hat
+        K_r_hat = -G_r*r[0,k]*np.transpose(x - x_ref)*P*B_ref_d*Ts + K_r_hat
+        Phi_hat = G_p*abs(x[0,0]*x[0,0])*np.transpose(x - x_ref)*P*B*Ts + Phi_hat
 
         # "sample"/measure output from system for plotting
-        k_x_sig[k] = y.T[0,0]
-        k_r_sig[k] = y.T[0,1]
+        k_x_sig[k] = K_x_hat.T[0,0]
+        k_r_sig[k] = K_r_hat.T
         u_sig[k] = x_ref.T[0,1]
-        y_sig[k] = x_ref.T[0,0]
+        y_sig[k] = x.T[0,1]
 
 
     plt.plot(t, y_sig, '-b', label= 'plant output')
